@@ -23,7 +23,7 @@ The root npm workspace is an explicit allowlist. Do not replace it with `apps/*`
 
 The following source belongs in private repositories, not merely in ignored directories inside this public working tree:
 
-- the official website source currently located at the legacy path `apps/site`
+- the official website source formerly located at the legacy path `apps/site`
 - Pro templates and production governance kits
 - advanced rule packs and exporters
 - Cloud, team workspace, audit, and enterprise integrations
@@ -60,4 +60,4 @@ If server-side builds are required, use separate public and private clones under
 
 Run `npm run check:open-source-boundary` before every public commit and in CI. The check rejects tracked private paths, wildcard workspaces, and missing ignore safeguards.
 
-The guard is defense in depth. It does not make an ignored private directory safe. Complete the migration of `apps/site` into a private repository before treating the repository boundary as finished.
+The guard is defense in depth. The legacy `apps/site` source has been moved to a private repository; its public path remains blocked and ignored to prevent accidental reintroduction.
