@@ -20,6 +20,7 @@ import { getModelConfig, getModelStatus, runModel, updateModelConfig } from './l
 import { detectSchemaVersion, migrateObjectIfNeeded } from '../../../packages/schema/src/migrations.js';
 
 const port = Number(process.env.ROLEUNION_SERVER_PORT || process.env.PORT || 8787);
+const host = process.env.ROLEUNION_SERVER_HOST;
 const runtimeMode = 'local_server';
 const storageAdapter = process.env.ROLEUNION_STORAGE_ADAPTER || process.env.STORAGE_MODE || 'file';
 const repoRoot = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -3951,6 +3952,6 @@ const server = createServer(async (req, res) => {
   return fail(res, ctx, 404, 'ROUTE_NOT_FOUND', `${method} ${path} not found`);
 });
 
-server.listen(port, () => {
+server.listen(port, host, () => {
   console.log(`RoleUnion Server listening on http://localhost:${port}`);
 });
