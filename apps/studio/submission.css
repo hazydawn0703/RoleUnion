@@ -11,13 +11,13 @@
   isolation: isolate;
 }
 .submission-page::after {
-  content: ''; position: fixed; inset: 0 0 0 auto; width: min(15vw, 25vh);
+  content: ''; position: fixed; inset: 0 0 0 auto; width: min(11vw, 20vh);
   background: url('./paper-relief.webp') right top / 100% 100% no-repeat;
   mask-image: linear-gradient(to right, transparent, black 9%);
   z-index: -1; pointer-events: none;
 }
 .submission-page .site-header {
-  position: relative; min-height: clamp(52px, 7vh, 72px);
+  position: relative; min-height: clamp(46px, 6vh, 58px);
   padding-inline: 5vw; background: transparent; border: 0;
 }
 .submission-page .site-header::before {
@@ -28,36 +28,36 @@
   content: ''; position: absolute; bottom: -4px; left: 0; width: 2.6vw; height: 9px;
   background: #ffc534; box-shadow: 1px 3px 4px #65523b45;
 }
-.submission-page .brand { color: #161519; font-size: clamp(20px, 2vw, 29px); }
+.submission-page .brand { color: #161519; font-size: clamp(18px, 1.6vw, 23px); }
 .submission-page .workspace {
-  width: min(68%, 1050px); margin: clamp(20px, 4vh, 44px) auto 36px;
+  width: min(76%, 740px); margin: clamp(36px, 8vh, 88px) auto 48px;
 }
-.submission { display: grid; gap: clamp(18px, 2.8vh, 30px); }
+.submission { display: grid; gap: clamp(28px, 4vh, 44px); }
 .interview-header { text-align: center; }
 .interview-header h1 {
-  color: var(--plum); font-size: clamp(32px, 4vw, 60px); font-weight: 760;
+  color: var(--plum); font-size: clamp(27px, 3vw, 40px); font-weight: 760;
 }
 .portrait, .messages li:not(.user)::before {
   background: url('./whale.webp') left center / 300% 100% no-repeat;
 }
 .portrait {
-  width: clamp(120px, 30vh, 300px); aspect-ratio: 1; margin: 10px auto 4px;
+  width: clamp(104px, 19vh, 176px); aspect-ratio: 1; margin: 10px auto 4px;
   filter: drop-shadow(3px 6px 4px #46344926);
 }
 .portrait[data-state=thinking] { background-position: center; animation: ponder 1.6s ease-in-out infinite alternate; }
 .portrait[data-state=happy] { background-position: right; }
 @keyframes ponder { to { transform: translateY(-3px) rotate(-3deg); } }
 @media (prefers-reduced-motion: reduce) { .portrait[data-state] { animation: none; } }
-.agent-caption { display: flex; justify-content: center; align-items: baseline; gap: .45em; font-size: clamp(16px, 1.75vw, 26px); }
+.agent-caption { display: flex; justify-content: center; align-items: baseline; gap: .45em; font-size: clamp(15px, 1.2vw, 18px); }
 .agent-caption strong::after { content: '·'; margin-left: .45em; }
 .submission .panel {
-  padding: clamp(16px, 2.5vw, 36px); background: var(--mint); border: 0;
+  padding: clamp(16px, 2vw, 24px); background: var(--mint); border: 0;
   border-radius: 16px; box-shadow: var(--raised);
 }
 .composer form { gap: clamp(14px, 2vh, 22px); }
-.composer label { gap: .55em; font-size: clamp(18px, 1.8vw, 26px); font-weight: 700; }
+.composer label { gap: .55em; font-size: clamp(16px, 1.3vw, 19px); font-weight: 700; }
 .composer textarea {
-  resize: none; min-width: 0; padding: .8em 1em; font-size: clamp(16px, 1.4vw, 21px);
+  resize: none; min-width: 0; padding: .8em 1em; font-size: 16px;
   line-height: 1.5; border: 0; border-radius: 11px; background: var(--paper);
   box-shadow: inset 2px 3px 5px #38303836, 1px 1px 1px #fff;
 }
@@ -66,38 +66,60 @@
   color: #2f251b; background: #ffc334; border: 0; font-weight: 700;
   box-shadow: var(--raised); min-height: 44px;
 }
-.composer .primary { overflow: hidden; padding: 0; font-size: clamp(16px, 1.4vw, 21px); }
+.composer .primary { overflow: hidden; padding: 0; font-size: 16px; }
 .action-label { display: flex; align-items: stretch; gap: .85em; padding-left: 1.2em; line-height: 2.8; }
 .action-arrow { display: grid; place-items: center; padding-inline: .55em; background: #ff9b48; }
 .submission .primary:hover { background: #ffb824; }
 .submission .primary:active { transform: translateY(1px); }
 .submission :focus-visible { outline-color: #704a89; }
-.in-conversation .interview-header h1 { font-size: clamp(28px, 3vw, 44px); }
-.in-conversation .portrait { width: clamp(64px, 14vh, 142px); margin-block: 4px 0; }
-.in-conversation .agent-caption { font-size: clamp(16px, 1.5vw, 22px); }
+.submission-page:has(.in-conversation) {
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh; min-height: 0;
+}
+.submission-page .workspace:has(.in-conversation) {
+  margin: 0 auto; min-height: 0;
+  padding-block: clamp(8px, 2vh, 22px) max(12px, env(safe-area-inset-bottom));
+}
+.in-conversation {
+  height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(10px, 2vh, 20px);
+}
+.chat-history { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 4px 4px 12px; }
+.messages .reply-status { background: transparent; box-shadow: none; font-size: 14px; color: #52625d; }
+.messages li.reply-status::before { display: none; }
+.in-conversation .interview-header h1 { font-size: clamp(21px, 2vw, 28px); }
+.in-conversation .portrait { width: clamp(44px, 8vh, 72px); margin-block: 4px 0; }
+.in-conversation .agent-caption { font-size: 15px; }
 .messages {
   display: flex; flex-direction: column; gap: clamp(14px, 2.6vh, 28px);
-  max-height: 46svh; overflow-y: auto; list-style: none; margin: 0;
+  list-style: none; margin: 0;
   padding: 6px 12px 18px; scrollbar-width: thin;
+}
+@media (max-height: 560px) {
+  .in-conversation .interview-header { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .in-conversation .portrait { width: 32px; margin: 0; }
 }
 .messages li {
   align-self: flex-start; display: flex; align-items: center; gap: 12px;
   max-width: 84%; padding: .7em 1.15em; background: #dff2ee; color: #174e49;
-  font-size: clamp(16px, 1.6vw, 23px); border-radius: 16px; box-shadow: var(--raised);
+  font-size: 16px; border-radius: 16px; box-shadow: var(--raised);
 }
-.messages li:not(.user)::before { content: ''; flex: none; width: 2.65em; aspect-ratio: 1; }
+.messages li:not(.user)::before { content: ''; flex: none; width: 2em; aspect-ratio: 1; }
 .messages li.user { align-self: flex-end; background: #e6d3f4; color: #49345d; border-bottom-right-radius: 4px; }
 .messages p { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.in-conversation .composer { padding: clamp(12px, 1.7vw, 24px); }
+.in-conversation .composer { padding: 12px; }
 .in-conversation .composer form { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 .in-conversation .composer textarea { background: #edf7f5; }
+.submission-page:has(.in-conversation) #notice {
+  bottom: calc(86px + env(safe-area-inset-bottom)); pointer-events: none;
+}
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 @media (max-width: 700px) {
   .submission-page::after { width: 28px; opacity: .45; }
-  .submission-page .workspace { width: calc(100% - 36px); margin-block: 22px; }
-  .portrait { width: clamp(110px, 24vh, 190px); }
+  .submission-page .workspace { width: calc(100% - 40px); margin-block: 36px; }
+  .portrait { width: clamp(96px, 16vh, 132px); }
   .messages { padding-inline: 4px; }
   .messages li { max-width: 92%; gap: 6px; padding: 10px 12px; }
   .messages li:not(.user)::before { width: 2em; }
