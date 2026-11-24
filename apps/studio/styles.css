@@ -93,23 +93,6 @@ summary { cursor: pointer; font-weight: 610; color: var(--accent); }
 .error-text { color: var(--error); }
 .welcome { max-width: 630px; margin: 8vh auto 0; padding: 34px; }
 .welcome a { justify-self: start; }
-.submission { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
-.messages { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
-.messages li { padding: 13px 16px; background: #fff; border: 1px solid var(--line); border-radius: 12px; width: min(90%, 560px); }
-.messages li.user { justify-self: end; background: var(--soft); }
-.messages span { color: var(--muted); font-size: .85rem; font-weight: 650; }
-.messages p { margin-top: 5px; white-space: pre-wrap; }
-.interview-header { text-align: center; padding: 14px 8px; background: radial-gradient(ellipse closest-side at 50% 56%, #e1edff, transparent); }
-.interview-header h1 { font-size: clamp(1.35rem, 3vw, 2rem); }
-.portrait { width: clamp(96px, 17vh, 158px); aspect-ratio: 1; margin: 14px auto 8px; background: url('./whale.webp') left center / 300% 100% no-repeat; }
-.portrait[data-state=thinking] { background-position: center; animation: ponder 1.6s ease-in-out infinite alternate; }
-.portrait[data-state=happy] { background-position: right; animation: nod .5s ease-out; }
-.agent-caption { display: flex; justify-content: center; align-items: baseline; gap: 8px; }
-.agent-caption span { font-size: .88rem; color: var(--muted); }
-.messages { overflow-y: auto; max-height: min(35vh, 380px); }
-@keyframes ponder { to { transform: translateY(-3px) rotate(-3deg); } }
-@keyframes nod { 50% { transform: translateY(-5px) rotate(2deg); } }
-@media (prefers-reduced-motion: reduce) { .portrait[data-state] { animation: none; } }
 .need-summary { display: grid; gap: 8px; border-left: 3px solid #abc9ba; padding-left: 12px; }
 #notice {
   position: fixed; bottom: 20px; right: 20px; max-width: calc(100vw - 40px);

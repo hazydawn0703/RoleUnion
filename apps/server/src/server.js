@@ -21,6 +21,8 @@ const studioPath = '/apps/studio';
 const studio = new URL('../../studio/', import.meta.url);
 const assets = {
   '/whale.webp': ['image/webp', new URL('whale.webp', studio)],
+  '/paper-relief.webp': ['image/webp', new URL('paper-relief.webp', studio)],
+  '/submission.css': ['text/css', new URL('submission.css', studio)],
   '/app.js': ['text/javascript', new URL('src/app.js', studio)],
   '/pm.js': ['text/javascript', new URL('src/pm.js', studio)],
   '/ui.js': ['text/javascript', new URL('src/ui.js', studio)],
