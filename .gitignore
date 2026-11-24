@@ -1,6 +1,6 @@
 node_modules/
 data/
-.tmp-server-smoke-*
+.env
 .DS_Store
 
 # Proprietary source belongs in private repositories, never in this public worktree.

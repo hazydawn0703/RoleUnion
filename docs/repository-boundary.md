@@ -8,14 +8,8 @@ The public `hazydawn0703/RoleUnion` repository is the source of truth for the Ap
 
 - `apps/server`
 - `apps/studio`
-- `packages/core`
-- `packages/examples`
-- `packages/exporter`
-- `packages/generators`
-- `packages/rules`
-- `packages/schema`
 - `packages/storage`
-- community documentation, examples, and development scripts
+- community documentation and development scripts
 
 The root npm workspace is an explicit allowlist. Do not replace it with `apps/*` or `packages/*`.
 
@@ -24,8 +18,6 @@ The root npm workspace is an explicit allowlist. Do not replace it with `apps/*`
 The following source belongs in private repositories, not merely in ignored directories inside this public working tree:
 
 - the official website source formerly located at the legacy path `apps/site`
-- Pro templates and production governance kits
-- advanced rule packs and exporters
 - Cloud, team workspace, audit, and enterprise integrations
 - customer-specific deliverables and internal deployment automation
 

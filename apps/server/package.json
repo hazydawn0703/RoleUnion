@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "node --watch src/server.js"
+  "dependencies": {
+    "octokit": "^5.0.5",
+    "zod": "^4.6.7"
   }
 }

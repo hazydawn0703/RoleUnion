@@ -1,153 +1,24 @@
 # RoleUnion
 
-RoleUnion 是面向 **人机协作工作流** 的边界建模与治理层。它帮助团队在 AI 参与复杂项目之前，明确：项目阶段、节点输入输出、人机执行模式、Review Gate、Execution Assets 与可导出的 Execution Kit。
+RoleUnion 将用户原始需求整理为有规划和代码依据的产品需求。用户通过项目链接与系统对话并确认诉求。系统对照有效规划判断方向，为符合规划的需求读取仓库实现，拆解为候选改动。产品经理处理待裁定需求、拆分或合并改动，并评审和导出 PRD。
 
-RoleUnion 的第一个重点落地场景是 **Agentic Development**：将模糊的软件开发任务转成可审核、可测试、可交接给 Codex / Claude Code / GitHub Copilot / Cursor / Hermes / OpenClaw 等 Coding Agent 的 Agent-ready Execution Kit。
+## 本地启动
 
-换句话说：
+1. 安装 Node.js 22 或更高版本，运行 `npm ci`。
+2. 注册 GitHub App，本地回调 URL 为 `http://localhost:8787/apps/studio/api/auth/callback`。在仓库权限中将 Contents 设为只读，关闭 Webhook。安装 App 时选择要接入的仓库。创建并下载 App 私钥。
+3. 将 `.env.example` 复制为 `.env`，填写 App ID、App URL 中的 slug、Client ID、Client secret 和私钥。可以将 PEM 放在一个双引号值里，换行写为字面量 `\n`。用 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` 生成会话密钥。
+4. 配置支持 JSON object 响应的 OpenAI 兼容模型。所选服务会收到原始反馈和分析所需的规划或代码片段，请使用获准处理这些资料的服务。
+5. 运行 `npm run dev` 后打开 `http://localhost:8787/apps/studio/`。部署运行命令为 `npm start`。分享链接时，将 `ROLEUNION_ORIGIN` 和 GitHub App 回调改为同一 HTTPS 域名，通过反向代理将 `/apps/studio/` 原样转发到服务。健康检查路径是 `/apps/studio/api/health`。
 
-- RoleUnion 的底层能力是通用的人机协作边界建模；
-- Agentic Development 是第一个商业爆破点；
-- Agent-ready Execution Kit 是第一个场景化输出；
-- AI Coding Governance Kit 是第一个商业化套件。
+## 处理需求
 
-## 当前公开范围
+1. 用 GitHub 登录。选择已授权仓库及基准分支，指定一到五份规划材料。可以混合使用仓库内 UTF-8 Markdown、TXT 或 RST 文件，以及直接在项目内录入的规划。
+2. 分享项目的需求链接。用户补充场景和期望结果后确认提交。同一浏览器可以继续未完成的对话。
+3. 查看需求结果。明确符合规划的需求自动进入代码分析。明确冲突时，系统依据引文裁定。规划沉默、冲突或证据不足时，由产品经理确认方向。更新规划或代码后，可以重新处理受影响的需求。
+4. 选择、合并或拆分候选改动，生成 PRD。草案中可以核对原话、规划引文和固定提交的代码证据。评审后的版本保留决策记录，采纳版本可下载为 Markdown。
 
-本 GitHub 仓库只发布 **MVP / Open-source 主线（Phase 0–9）**。
+## 验证与试用
 
-- Phase 0–4B：Schema/Core/Rules、Server、Storage、Studio Server 数据接入、Workflow Studio 编辑能力。
-- Phase 5：Execution Assets 完整化（Prompt / Checklist / Artifact Template）。
-- Phase 6：Execution Kit Export 完整化（Draft / Final Kit、Preview / Generate / Download）。
-- Phase 7：Model Access Layer 基础能力（OpenAI-compatible、structured output、mock fallback）。
-- Agentic Development P0：Agent Execution Plan、Sandbox Execution Contract、Promotion Gate、Evidence Template、Node Detail 的 Agent / Sandbox Tab，以及 Agent-ready Execution Kit files。
-- Phase 8：AI Assisted Edit + server-backed Diff Review；Studio 支持自然语言生成 reviewed workflow diff，并可修改 Agent / Sandbox 字段。
-- Phase 9：MVP Templates / Examples / README / Release Hardening，覆盖 Agentic Development P0。
+运行 `npm run check` 执行仓库边界检查和端到端集成测试。测试使用受控的 GitHub 和模型响应，覆盖对话确认、规划裁定、证据校验、拆并、草案评审和重启恢复。
 
-Phase 10–14（Pro Template System、Enterprise Organization Templates、Enterprise Rules & Governance、Enterprise Privacy / Model Policy、SaaS Platform / Billing）属于商业化闭源路线，不在本公开仓库发布。
-
-### Local Demo Mode
-
-无需启动 Server，Studio 会使用内置 Example Workflow 和 Mock Model Service。该模式只用于 GitHub Demo / 快速体验，UI 会标记：
-
-```text
-Mode: Local Demo / Mock Model
-```
-
-### Local Server Mode
-
-当前正式开源运行模式：Studio 通过 HTTP API 访问 RoleUnion Server，Server 负责 `.env`、持久化、LLM Access、Workflow/Asset/Execution Kit 生成。Local Server 默认使用 FileStorage，并会在首次启动时自动创建 `./data`；如需一次性内存模式，可显式设置 `ROLEUNION_STORAGE_ADAPTER=memory`。
-
-## Quick Start
-
-```bash
-npm install
-cp .env.example .env
-npm run dev:server
-```
-
-Start Studio:
-
-```bash
-npm run dev:studio
-```
-
-- Server: `http://localhost:8787`
-- Studio: `http://localhost:5173/apps/studio/index.html`（如果 5173 被占用，终端会自动打印新的端口，例如 5174）
-- `npm run dev:studio` 会从仓库根目录 serve Studio，并将 `/api/*` proxy 到 `ROLEUNION_API_BASE_URL`（默认 `http://localhost:8787`）。
-- 若页面只有背景没有内容，请确认浏览器打开的是 `npm run dev:studio` 终端打印的 URL，并停止旧的 `py -m http.server 5173` 进程或换用自动分配的新端口。
-- Studio API Base URL: `VITE_ROLEUNION_API_BASE_URL` → `window.ROLEUNION_API_BASE_URL` → `/api`
-
-## OpenAI-compatible Model 配置
-
-开源版支持两种配置方式：
-
-- 在 `.env` 中设置默认模型配置。
-- 在 Studio 的 `Settings / Model Access` 页面保存配置，保存后会立即更新 Server 运行时，并写入 `ROLEUNION_MODEL_CONFIG_PATH`（默认 `./data/model-config.json`）。
-
-`.env.example` 已包含：
-
-```bash
-ROLEUNION_MODEL_CONFIG_PATH=./data/model-config.json
-ROLEUNION_LLM_PROVIDER=openai-compatible
-ROLEUNION_LLM_API_KEY=
-ROLEUNION_LLM_BASE_URL=
-ROLEUNION_LLM_DEFAULT_MODEL=
-ROLEUNION_LLM_PLANNING_MODEL=
-ROLEUNION_LLM_PROMPT_MODEL=
-ROLEUNION_LLM_DIFF_MODEL=
-ROLEUNION_LLM_ENABLE_STRUCTURED_OUTPUT=true
-ROLEUNION_ALLOW_MOCK_MODEL=true
-```
-
-如果未配置 API Key，Server 会在允许 mock 的情况下使用 Mock Model fallback。Studio 不会回显原始 API Key，只显示是否已配置和 masked 值；模型 Key 只保存在 Server 本地配置文件中，不进入浏览器 localStorage，也不进入 git（`data/` 已被忽略）。
-
-## MVP Built-in Templates
-
-Phase 9 公开仓库内置 3 个 MVP 模板：
-
-1. **AI SaaS Feature MVP** — AI SaaS 功能从 0 到 1。
-2. **Internal AI Tool** — 企业内部 AI 工具或自动化系统建设。
-3. **Legacy System AI Modernization** — 传统系统接入 AI 能力或使用 AI Coding 工具重构。
-
-模板清单示例：`examples/templates.json`。
-
-Server 公开只读模板 API：`GET /api/templates` 与 `GET /api/templates/:templateId`。
-
-## Examples
-
-- `examples/ai-saas-feature-mvp.json`
-- `examples/internal-ai-tool.json`
-- `examples/legacy-system-ai-modernization.json`
-- `examples/templates.json`
-
-这些示例均为 RoleUnion Spec，包含 workflow、assets、validation、diff 示例与模板引用。
-
-`ai-saas-feature-mvp.json` 包含一个 L3 Sandbox Coding Agent 节点和一个 L0 Production 节点；`internal-ai-tool.json` 默认禁用 Agentic Development 字段；`legacy-system-ai-modernization.json` 使用更保守的 L2 Agent 计划。
-
-当前公开示例以软件开发和 AI 转型项目为主，但 RoleUnion Spec 本身并不限定于 Coding Agent 场景，后续可扩展到 GEO 运营、内容生产、企业审批、数据分析、咨询交付和多 Agent 业务流程治理。
-
-## 关键文档
-
-- `docs/RoleUnion PRD Agentic Development 补充章节42–47.md` — Agentic Development 场景补充，定义 Coding Agent 执行等级、沙箱执行契约、证据回收、Promotion Gate 和 Agent 安全 / 成本 / 权限规则。
-- `docs/open-source-phase-plan.md` — 最新开源 / 闭源 Phase 计划，明确 Agentic Development P0 的 Agent / Sandbox Tab、Sandbox Contract Export 和 Community Core 边界。
-
-## Workspace 结构
-
-- `apps/studio`：RoleUnion Studio
-- `apps/server`：RoleUnion Server API
-- `packages/schema`：RoleUnion schema + validation
-- `packages/core`：Workflow / Diff / Template 核心对象
-- `packages/rules`：Boundary Rules
-- `packages/generators`：Workflow / Prompt / Checklist / ExecutionKit generators
-- `packages/exporter`：Execution Kit exporter
-- `packages/storage`：MemoryStorage / FileStorage
-- `packages/examples`：Example Spec loader
-- `examples`：生成后的示例数据
-- `scripts`：检查与示例生成脚本
-
-## 常用命令
-
-```bash
-npm run typecheck
-npm run test
-npm run smoke:server
-npm run check
-node scripts/generate-example.js
-```
-
-`npm run check` 会覆盖 schema/rules/core/storage/server smoke、Agent / Sandbox 保存、Agent-ready kit export，并运行 Studio server-first 路径检查。
-
-## 数据与安全边界
-
-- 正式数据源是 Server + Storage，不是浏览器 localStorage。Local Server 默认将 Project / Workflow / Context / Assets / Jobs 持久化到 `./data`。
-- Local Demo Mode 仅保存演示 / UI 状态。
-- 所有 Project 相关数据必须处于 workspace scope。
-- LLM Context 只在用户触发生成 / Diff 时发送到配置的 provider。
-- AI Assisted Edit 必须生成 Diff，不能静默覆盖正式 Workflow。
-
-## 当前已知限制
-
-- Diff Review UI 仍是轻量列表，不是复杂 diff viewer。
-- Execution Kit 下载目前通过 API 返回内容，Studio 侧仍以复制内容为主。
-- Real LLM workflow / prompt generation 可继续深化。
-- Pro / Enterprise / SaaS 能力不在公开仓库范围内。
+真实项目试用时，选取此前处理过的一批需求，记录人工耗时和用 RoleUnion 处理时产品经理的实际投入。逐项复核自动拒绝的依据、误合并、重写范围，以及 PRD 中能否追溯到原话和代码。用同等评审质量下的投入时间判断是否适合切换日常流程。
