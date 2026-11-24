@@ -8,12 +8,6 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const expectedWorkspaces = [
   'apps/server',
   'apps/studio',
-  'packages/core',
-  'packages/examples',
-  'packages/exporter',
-  'packages/generators',
-  'packages/rules',
-  'packages/schema',
   'packages/storage',
 ];
 

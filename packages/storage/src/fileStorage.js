@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, dirname } from 'node:path';
 
 function readJsonFile(filePath) {
@@ -18,7 +19,6 @@ function replaceFileWithRetry(tempPath, filePath) {
     } catch (e) {
       lastError = e;
       if (!['EACCES', 'EBUSY', 'EPERM'].includes(e.code) || attempt === 4) throw e;
-      try { if (existsSync(filePath)) unlinkSync(filePath); } catch {}
       waitSync(25 * (attempt + 1));
     }
   }
@@ -45,7 +45,7 @@ export class FileStorage {
 
   atomicWrite(filePath, data) {
     mkdirSync(dirname(filePath), { recursive: true });
-    const tempPath = `${filePath}.tmp-${Date.now()}`;
+    const tempPath = `${filePath}.tmp-${randomUUID()}`;
     try {
       writeFileSync(tempPath, JSON.stringify(data, null, 2));
       replaceFileWithRetry(tempPath, filePath);
