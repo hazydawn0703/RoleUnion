@@ -85,8 +85,9 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
   const state = { sha: 'a'.repeat(40), calls: [], blocked: false, policy: repoPolicy };
   const git = {
     authorizationUrl: token => 'https://github.com/login/oauth/authorize?state=' + token,
-    signIn: async code => ({ id: code === 'owner' ? '1' : '2', login: code }),
-    repositories: async user => user.id === '1' ? [repo] : [],
+    signIn: async login => ({ id: login, login }),
+    account: async (_user, login) => ({ id: login, login }),
+    repositories: async user => user.id === 'tech' ? [repo] : [],
     open: async (_repo, _branch, pinned) => {
       if (state.blocked) throw new HttpError(503, 'GitHub access revoked.');
       return {
@@ -137,9 +138,10 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     await api('/projects', { expected: 401 });
     let cookie = await login('owner');
     const other = await login('other');
-    const create = { name: 'Store', repoId: 501, installation: 77, branch: 'main',
-      sources: [{ type: 'repository', path: 'docs/roadmap.md' }] };
-    await api('/projects', { body: create, cookie: other, expected: 422 });
+    const tech = await login('tech');
+    const editor = await login('editor');
+    const create = { name: 'Store', sources: [{ type: 'inline', title: 'Roadmap', text: repoPolicy }] };
+    await api('/projects', { body: { ...create, sources: [{ type: 'repository', path: 'docs/roadmap.md' }] }, cookie, expected: 422 });
     const key = randomUUID();
     const { id } = await api('/projects', { body: create, cookie, key });
     assert.equal((await api('/projects', { body: create, cookie, key })).id, id);
@@ -147,7 +149,8 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     const get = () => api(path, { cookie });
     const act = (command, body, expected) => api(path + '/' + command, { cookie, body, expected });
     const initial = await get();
-    assert.equal(initial.plans[0].sources[0].sha, state.sha);
+    assert.equal(initial.repo, null);
+    assert.equal(initial.sha, null);
     await api(path, { cookie: other, expected: 404 });
     const invite = '/submit/' + id + '/' + initial.invite;
     assert.deepEqual(await api(invite), { name: 'Store' });
@@ -182,7 +185,34 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
       assert.fail('Timed out waiting for pipeline');
     }
     const a = await submit('Need order refund lines', true);
+    const waiting = await when(p => p.needs[0]?.work.status === 'waiting-repository');
+    assert.equal(waiting.needs[0].decisions[0].verdict, 'accepted');
+    assert.equal(waiting.needs[0].analysis, undefined);
+    assert(!state.calls.includes('select-files'));
+    const connect = { repoId: repo.id, installation: repo.installation, branch: 'main' };
+    await act('connect-repository', connect, 403);
+    await act('invite-member', { login: 'tech', role: 'connector' });
+    await act('invite-member', { login: 'editor', role: 'editor' });
+    const memberAction = (cookie, command, body, expected) => api(path + '/' + command, { cookie, body, expected });
+    assert.equal((await api(path, { cookie: tech })).offeredRole, 'connector');
+    await memberAction(tech, 'connect-repository', connect, 403);
+    await memberAction(other, 'accept-invite', {}, 404);
+    await memberAction(tech, 'accept-invite', {});
+    await memberAction(editor, 'accept-invite', {});
+    assert.deepEqual(Object.keys(await api(path, { cookie: tech })).sort(), ['id','name','repo','branch','sha','role'].sort());
+    await memberAction(tech, 'refresh', {}, 403);
+    await memberAction(editor, 'invite-member', { login: 'other', role: 'editor' }, 403);
+    await memberAction(editor, 'connect-repository', connect, 403);
+    await memberAction(tech, 'connect-repository', { ...connect, repoId: 999 }, 403);
+    await memberAction(tech, 'connect-repository', connect);
+    await memberAction(tech, 'connect-repository', connect, 409);
     await when(project => project.candidates.length === 1);
+    const second = await api('/projects', { body: { ...create, name: 'Second' }, cookie: editor });
+    assert.deepEqual(new Set((await api('/projects', { cookie: editor })).map(p => p.id)), new Set([id, second.id]));
+    assert.equal((await api('/projects/' + second.id, { cookie: editor })).name, 'Second');
+    await api('/projects/' + second.id, { cookie, expected: 404 });
+    await act('remove-member', { id: 'tech' });
+    await api(path, { cookie: tech, expected: 404 });
     await submit('Need net totals for reconciliation');
     const rejected = await submit('Need customer quote export');
     const uncertain = await submit('Need accessible controls');
@@ -208,7 +238,7 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     assert.notEqual(singleton.id, left.id);
     await act('undo-group', {});
 
-    const draft = await act('draft', { candidates: [left.id] });
+    const draft = await memberAction(editor, 'draft', { candidates: [left.id] });
     const edited = await act('edit-draft', { draftId: draft.id, versionId: draft.versionId,
       sections: { ...draftSections, scope: 'Refund lines only' } });
     await act('decide-draft', { draftId: draft.id, versionId: edited.versionId, verdict: 'returned', reason: 'Clarify scope.' });
@@ -228,8 +258,6 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     assert.equal(restored.drafts[0].decisions.at(-1).verdict, 'accepted');
     assert.equal(restored.drafts[0].versions[2].context.sha, 'a'.repeat(40));
     state.policy = repoPolicy + '\nNew roadmap.';
-    await act('refresh', {});
-    assert.notEqual((await get()).planId, initial.planId);
     state.blocked = true;
     await act('process', { needId: first.id });
     const failed = await when(project => project.needs.find(need => need.id === first.id).work.status === 'failed');
@@ -238,6 +266,9 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     state.blocked = false;
     await act('process', { needId: first.id });
     await when(project => project.needs.find(need => need.id === first.id).analysis.sha === state.sha);
+    await memberAction(await login('editor'), 'refresh', { sources: [{ type: 'repository', path: 'docs/roadmap.md' }] });
+    assert.notEqual((await get()).planId, initial.planId);
+    await when(p => p.needs.every(n => n.work.status === 'done'));
     assert(state.calls.includes('verify-rejection'));
   } finally {
     if (server?.listening) await new Promise(resolve => server.close(resolve));

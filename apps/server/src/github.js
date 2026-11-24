@@ -19,6 +19,16 @@ export function createGitHub({ slug, ...config }) {
       const { data: user } = await client.rest.users.getAuthenticated();
       return { id: String(user.id), login: user.login, client };
     },
+    async account(user, login) {
+      try {
+        const { data } = await user.client.rest.users.getByUsername({ username: login });
+        requireThat(data.type === 'User', 422, '请选择个人 GitHub 账号。');
+        return { id: String(data.id), login: data.login };
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        throw new HttpError(error.status === 404 ? 422 : 502, '无法确认该 GitHub 用户，请检查用户名或稍后重试。');
+      }
+    },
     async repositories(user) {
       try {
         const installations = await user.client.paginate('GET /user/installations');
@@ -26,7 +36,7 @@ export function createGitHub({ slug, ...config }) {
           const repositories = await user.client.paginate('GET /user/installations/{installation_id}/repositories', {
             installation_id: installation.id,
           });
-          return repositories.map(repo => ({
+          return repositories.filter(repo => repo.permissions?.admin === true).map(repo => ({
             id: repo.id, name: repo.full_name, branch: repo.default_branch, installation: installation.id,
           }));
         }));
