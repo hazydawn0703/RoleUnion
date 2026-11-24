@@ -39,22 +39,22 @@ export function createAuth({ secret, origin, studioPath, github }) {
       requireThat(user && session.expiresAt > Date.now(), 401, '请登录 GitHub。');
       return user;
     },
-    start(response) {
+    start(response, projectId) {
       const state = randomBytes(32).toString('base64url');
       response.writeHead(302, {
         location: github.authorizationUrl(state, redirectUri),
-        'set-cookie': issue('roleunion_oauth', { state }, 600),
+        'set-cookie': issue('roleunion_oauth', { state, projectId }, 600),
       }).end();
     },
     async finish(request, response, params) {
-      const state = read(request, 'roleunion_oauth')?.state;
+      const { state, projectId } = read(request, 'roleunion_oauth') || {};
       requireThat(state && state === params.get('state') && params.get('code'), 400, 'GitHub 登录已失效，请重新开始。');
       const user = await github.signIn(params.get('code'), redirectUri);
       const id = randomBytes(32).toString('base64url');
       for (const [key, stored] of users) if (stored.expiresAt <= Date.now()) users.delete(key);
       users.set(id, { ...user, expiresAt: Date.now() + lifetime * 1000 });
       response.writeHead(303, {
-        location: studioPath + '/',
+        location: studioPath + '/' + (projectId ? 'projects/' + projectId : ''),
         'set-cookie': [issue('roleunion_session', { id }, lifetime), cookie('roleunion_oauth', '', 0)],
       }).end();
     },

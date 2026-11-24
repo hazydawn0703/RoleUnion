@@ -7,12 +7,15 @@ const sections = {
   desiredBehavior: '目标行为', scope: '改动范围', acceptance: '验收条件', openQuestions: '待核实与取舍',
 };
 
-function sourceEditor(sources = [{ type: 'repository', path: '' }]) {
+const roles = { owner: '项目负责人', editor: '产品协作者', connector: '仓库管理员', invited: '待接受邀请' };
+
+function sourceEditor(sources, connected) {
   const list = el('div', { className: 'source-list' });
   function add(source) {
     const type = el('select', { 'aria-label': '规划来源' }, ...[
       ['repository', 'GitHub 文件'], ['inline', '项目内录入'],
-    ].map(([value, label]) => el('option', { value, selected: value === source.type }, label)));
+    ].filter(([value]) => connected || value === 'inline')
+      .map(([value, label]) => el('option', { value, selected: value === source.type }, label)));
     const inputs = el('div');
     function fields() {
       inputs.replaceChildren(...(type.value === 'repository'
@@ -32,7 +35,7 @@ function sourceEditor(sources = [{ type: 'repository', path: '' }]) {
   sources.forEach(add);
   return {
     controls: el('fieldset', {}, el('legend', {}, '判断需求方向的依据'), list, button('添加规划来源', () => {
-      if (list.children.length < 5) add({ type: 'repository' });
+      if (list.children.length < 5) add({ type: 'inline' });
       else show('最多添加五份规划。', true);
     })),
     read: () => [...list.children].map(item => item.querySelector('select').value === 'repository'
@@ -43,40 +46,48 @@ function sourceEditor(sources = [{ type: 'repository', path: '' }]) {
 
 async function home() {
   const projects = await api('/projects');
-  const create = block(el('h2', {}, '接入 GitHub 仓库'));
-  async function loadRepositories() {
+  const plans = sourceEditor([{ type: 'inline' }], false);
+  const create = block(el('h2', {}, '创建项目'), submit('创建项目', async data => {
+    const result = await api('/projects', { name: data.get('name'), sources: plans.read() });
+    location.assign(studioPath + '/projects/' + result.id);
+  }, field('项目名称', input('name', '', { maxLength: 240 })), plans.controls));
+  render(heading('项目', '从用户原始需求生成有依据、可评审的 PRD。'), el('div', { className: 'home-grid' },
+    block(el('h2', {}, '我的项目'), projects.length ? projects.map(project =>
+      el('a', { className: 'project-card', href: studioPath + '/projects/' + project.id },
+        el('strong', {}, project.name), muted([roles[project.role], project.repo].filter(Boolean).join(' · ')))) : muted('创建首个项目后，便可邀请用户提交需求。')), create));
+}
+
+function repositoryPanel(project, action, installUrl) {
+  if (project.repo) return block(el('h2', {}, '已连接仓库'), identity(project.repo.name, project.branch + ' · ' + project.sha));
+  const controls = el('div');
+  const load = async () => {
     const repos = await api('/repositories');
     if (!repos.length) {
-      create.replaceChildren(el('h2', {}, '接入 GitHub 仓库'),
-        muted('安装 RoleUnion GitHub App，并授权要分析的仓库。安装后返回此页刷新。'),
-        row(installLink, button('刷新已授权仓库', loadRepositories)));
+      controls.replaceChildren(muted('未找到可连接的仓库。请用拥有目标仓库管理权限的账号安装或配置 App，组织要求审批时请联系组织所有者。'));
       return;
     }
-    const repo = el('select', { name: 'repo', required: true }, repos.map((item, index) =>
-      el('option', { value: String(index) }, item.name)));
+    const picker = el('select', { name: 'repo' }, repos.map((r, i) => el('option', { value: String(i) }, r.name)));
     const branch = input('branch', repos[0].branch, { maxLength: 240 });
-    repo.addEventListener('change', () => branch.value = repos[Number(repo.value)].branch);
-    const plans = sourceEditor();
-    create.replaceChildren(el('h2', {}, '接入 GitHub 仓库'),
-      submit('创建项目', async data => {
-        const repository = repos[Number(data.get('repo'))];
-        const result = await api('/projects', { name: data.get('name'), repoId: repository.id,
-          installation: repository.installation, branch: data.get('branch'), sources: plans.read() });
-        location.assign(studioPath + '/projects/' + result.id);
-      },
-      el('div', { className: 'form-grid' }, field('项目名称', input('name', '', { maxLength: 240 })),
-        field('GitHub 仓库', repo), field('基准分支', branch)), plans.controls));
-  }
-  const settings = await api('/session');
-  const installLink = settings.installUrl
-    ? el('a', { href: settings.installUrl, target: '_blank', rel: 'noreferrer' }, '安装 GitHub App')
-    : null;
-  create.append(muted('选择已授权的仓库并指定产品规划。'),
-    row(button('加载已授权仓库', loadRepositories, 'primary'), installLink));
-  render(heading('项目', '从用户原始需求生成有依据、可评审的 PRD。'), el('div', { className: 'home-grid' },
-    block(el('h2', {}, '已接入项目'), projects.length ? projects.map(project =>
-      el('a', { className: 'project-card', href: studioPath + '/projects/' + project.id },
-        el('strong', {}, project.name), muted(project.repo))) : muted('创建首个项目后，便可邀请用户提交需求。')), create));
+    picker.addEventListener('change', () => branch.value = repos[Number(picker.value)].branch);
+    controls.replaceChildren(submit('确认连接仓库', data => {
+      const repository = repos[Number(data.get('repo'))];
+      return action('connect-repository', { repoId: repository.id, installation: repository.installation, branch: data.get('branch') });
+    }, field('GitHub 仓库', picker), field('基准分支', branch),
+    muted('接入后，RoleUnion 将向配置的模型发送分析所需的代码片段，项目负责人和产品协作者可查看引用与 PRD。')));
+  };
+  return block(el('h2', {}, '连接 GitHub 仓库'), row(button('加载已授权仓库', load),
+    installUrl && el('a', { href: installUrl, target: '_blank', rel: 'noreferrer' }, '安装或配置只读 GitHub App')), controls);
+}
+
+function teamPanel(project, action) {
+  return block(el('h2', {}, '项目成员'), muted('邀请绑定到指定的 GitHub 账号。对方登录后可在“我的项目”中接受邀请。'),
+    submit('邀请成员', data => action('invite-member', Object.fromEntries(data)),
+      field('GitHub 用户名', input('login')), field('角色', el('select', { name: 'role' },
+        el('option', { value: 'connector' }, '仓库管理员 · 仅连接仓库'),
+        el('option', { value: 'editor' }, '产品协作者 · 管理规划、查看代码证据与评审 PRD')))),
+    ...project.members.map(m => row(el('span', {}, m.login + ' · ' + roles[m.role] + (m.pending ? ' · 待接受' : '')),
+      button(m.pending ? '撤销邀请' : '移除成员', () => action('remove-member', { id: m.id })))),
+    button('复制项目链接', async () => { await navigator.clipboard.writeText(location.href); show('已复制项目链接。'); }));
 }
 
 function codeLink(project, sha, ref) {
@@ -131,7 +142,7 @@ function exportVersion(project, version) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function openProject(path) {
+async function openProject(path, installUrl) {
   let project;
   let tab = 'needs';
   let activeDraft;
@@ -177,7 +188,8 @@ async function openProject(path) {
         el('option', { value: 'rejected' }, '拒绝'))), field('理由', textarea('reason', '', { rows: 2 }))),
       failed && el('p', { className: 'error-text' }, need.work.error),
       running && muted('正在处理，可刷新查看结果。'),
-      !running && (failed || !active || (active.verdict === 'accepted' && !currentAnalysis))
+      need.work?.status === 'waiting-repository' && muted('等待连接仓库，接入后将自动分析此需求。'),
+      !running && (failed || !active || (project.repo && active.verdict === 'accepted' && !currentAnalysis))
         && button(failed ? '重试处理' : active ? '刷新代码分析' : '判断规划符合度',
           () => action('process', { needId: need.id })),
       currentAnalysis && details('代码分析 · ' + analysis.parts.length + ' 项', muted(analysis.summary),
@@ -268,6 +280,16 @@ async function openProject(path) {
   }
 
   function view() {
+    const back = el('a', { className: 'back', href: studioPath + '/' }, '← 切换项目');
+    if (project.role === 'invited') {
+      render(back, heading(project.name, '邀请你担任' + roles[project.offeredRole]),
+        button('接受项目邀请', () => action('accept-invite', {}), 'primary'));
+      return;
+    }
+    if (project.role === 'connector') {
+      render(back, heading(project.name, roles.connector), repositoryPanel(project, action, installUrl));
+      return;
+    }
     const invite = new URL(studioPath + '/submit/' + project.id + '/' + project.invite, location.origin).href;
     const currentPlan = project.plans.find(item => item.id === project.planId);
     const tabs = [
@@ -292,17 +314,18 @@ async function openProject(path) {
     } else if (tab === 'drafts') {
       content = drafts();
     } else {
-      const plans = sourceEditor(project.sources);
-      content = block(el('h2', {}, '规划与仓库'),
-        el('div', { className: 'form-grid' }, identity('基准分支', project.branch), identity('代码提交', project.sha),
-          identity('生效规划版本', currentPlan.id.slice(0, 8) + ' · ' + date(currentPlan.createdAt))),
+      const plans = sourceEditor(project.sources, Boolean(project.repo));
+      content = [block(el('h2', {}, '产品规划'),
+        identity('生效规划版本', currentPlan.id.slice(0, 8) + ' · ' + date(currentPlan.createdAt)),
         details('查看生效的规划正文', ...currentPlan.sources.map(source =>
           identity(source.path || source.title, source.text))),
-        submit('保存规划并刷新代码', data => action('refresh', { sources: plans.read() }), plans.controls),
-        button('仅刷新当前仓库与规划', () => action('refresh', {})));
+        submit('保存规划', () => action('refresh', { sources: plans.read() }), plans.controls),
+        project.repo && button('刷新当前仓库与规划', () => action('refresh', {}))),
+        project.role === 'owner' && teamPanel(project, action),
+        project.role === 'owner' && repositoryPanel(project, action, installUrl)];
     }
-    render(el('a', { className: 'back', href: studioPath + '/' }, '← 项目'),
-      heading(project.name, project.repo.name + ' · ' + project.branch + ' · ' + project.sha.slice(0, 8),
+    render(back,
+      heading(project.name, project.repo ? project.repo.name + ' · ' + project.branch + ' · ' + project.sha.slice(0, 8) : '尚未连接仓库 · 可收集需求并判断规划符合度',
         row(button('刷新', () => update()), button('复制需求链接', async () => {
           await navigator.clipboard.writeText(invite);
           show('已复制需求链接。');
@@ -325,14 +348,15 @@ export async function openManager() {
   });
   if (!session) {
     render(el('section', { className: 'welcome panel' }, el('h1', {}, '从用户原话到可评审的 PRD'),
-      muted('连接 GitHub 仓库，依据产品规划判断需求，结合代码现状拆解与合并。'),
-      el('a', { className: 'primary button', href: studioPath + '/api/auth/login' }, '使用 GitHub 登录')));
+      muted('先录入规划，收集和澄清需求。接入仓库后，结合代码现状拆解与合并。'),
+      el('a', { className: 'primary button', href: studioPath + '/api/auth/login' +
+        (currentPath.startsWith('/projects/') ? '?project=' + encodeURIComponent(currentPath.split('/')[2]) : '') }, '使用 GitHub 登录')));
     return;
   }
   document.querySelector('#session').replaceChildren(row(el('span', {}, session.login), button('退出', async () => {
     await api('/auth/logout', {});
     location.assign(studioPath + '/');
   })));
-  if (currentPath.startsWith('/projects/')) await openProject(currentPath);
+  if (currentPath.startsWith('/projects/')) await openProject(currentPath, session.installUrl);
   else await home();
 }

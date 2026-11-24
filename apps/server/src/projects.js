@@ -88,9 +88,16 @@ export function createProjects({ github, analysis, storage }) {
     requireThat(project, 404, '找不到项目。');
     return project;
   }
-  function owned(user, id) {
-    const project = read(id);
-    requireThat(project.owner === user.id, 404, '找不到项目。');
+  function roleOf(project, user) {
+    if (project.owner === user.id) return 'owner';
+    const member = project.members?.find(item => item.id === user.id);
+    return member?.pending ? 'invited' : member?.role;
+  }
+  function accessible(user, projectId, roles) {
+    const project = read(projectId);
+    const role = roleOf(project, user);
+    requireThat(role, 404, '找不到项目。');
+    requireThat(!roles || roles.includes(role), 403, '当前项目角色无权执行此操作。');
     return project;
   }
   function invited(projectId, invite) {
@@ -98,9 +105,14 @@ export function createProjects({ github, analysis, storage }) {
     requireThat(project.invite === invite, 404, '提交链接无效。');
     return project;
   }
-  function view(project) {
-    const { operations, grouping, groupingHistory, ...rest } = project;
-    return { ...rest, candidates: activeCandidates(project), canUndoGroup: Boolean(groupingHistory.length) };
+  function view(project, user) {
+    const role = roleOf(project, user);
+    const { id, name, repo, branch, sha, members = [], operations, grouping, groupingHistory, ...rest } = project;
+    if (role === 'invited') return { id, name, role, offeredRole: members.find(m => m.id === user.id).role };
+    const summary = { id, name, repo, branch, sha, role };
+    if (role === 'connector') return summary;
+    return { ...summary, ...rest, members: role === 'owner' ? members : undefined,
+      candidates: activeCandidates(project), canUndoGroup: Boolean(groupingHistory.length) };
   }
 
   async function mutate(load, key, operation, perform) {
@@ -132,7 +144,8 @@ export function createProjects({ github, analysis, storage }) {
   }
 
   async function refresh(project, sources) {
-    const snapshot = await github.open(project.repo, project.branch);
+    requireThat(project.repo || sources.every(source => source.type === 'inline'), 422, '连接仓库后可选择仓库内的规划文件。');
+    const snapshot = project.repo ? await github.open(project.repo, project.branch) : null;
     const plans = await Promise.all(sources.map(async source => {
       if (source.type === 'inline') return { ...source };
       return { ...source, text: await snapshot.read(source.path), sha: snapshot.sha };
@@ -145,7 +158,7 @@ export function createProjects({ github, analysis, storage }) {
       project.plans.push({ id: project.planId, createdAt: now(), sources: plans });
       project.planFingerprint = fingerprint;
     }
-    project.sha = snapshot.sha;
+    project.sha = snapshot?.sha ?? null;
     project.sources = sources;
     project.refreshedAt = now();
   }
@@ -190,8 +203,7 @@ export function createProjects({ github, analysis, storage }) {
   }
 
   const repoInput = z.object({
-    name: short, repoId: z.int().positive(), installation: z.int().positive(),
-    branch: short, sources: sourcesSchema,
+    repoId: z.int().positive(), installation: z.int().positive(), branch: short,
   });
 
   const workers = new Set();
@@ -216,8 +228,12 @@ export function createProjects({ github, analysis, storage }) {
               const need = find(current.needs, queued.id);
               const decision = decisionFor(current, need);
               requireThat(decision, 409, '规划已更新。');
-              if (decision.verdict === 'accepted') await analyze(current, need);
-              need.work.status = 'done';
+              if (decision.verdict === 'accepted' && !current.repo) {
+                need.work.status = 'waiting-repository';
+              } else {
+                if (decision.verdict === 'accepted') await analyze(current, need);
+                need.work.status = 'done';
+              }
               return {};
             });
           } catch (error) {
@@ -248,10 +264,13 @@ export function createProjects({ github, analysis, storage }) {
         .forEach(project => runQueue(project.id));
     },
     list(user) {
-      return all().filter(p => p.owner === user.id).map(({ id, name, repo, sha }) => ({ id, name, repo: repo.name, sha }));
+      return all().filter(p => roleOf(p, user)).map(p => ({
+        id: p.id, name: p.name, role: roleOf(p, user),
+        repo: roleOf(p, user) === 'invited' ? null : p.repo?.name,
+      }));
     },
     get(user, id) {
-      return view(owned(user, id));
+      return view(accessible(user, id), user);
     },
     async create(user, input, key) {
       const existing = storage.getProject(workspace, key);
@@ -259,11 +278,8 @@ export function createProjects({ github, analysis, storage }) {
         requireThat(existing.owner === user.id, 409, '项目编号已使用。');
         return { id: existing.id };
       }
-      const { name, repoId, installation, branch, sources } = repoInput.parse(input);
-      const repositories = await github.repositories(user);
-      const repo = repositories.find(repo => repo.id === repoId && repo.installation === installation);
-      requireThat(repo, 422, '请选择已授权的 GitHub 仓库。');
-      const project = { id: key, workspace_id: workspace, owner: user.id, name, repo, branch,
+      const { name, sources } = z.object({ name: short, sources: sourcesSchema }).strict().parse(input);
+      const project = { id: key, workspace_id: workspace, owner: user.id, name, repo: null, branch: null, members: [],
         invite: randomUUID(), operations: {}, revision: 0, plans: [], conversations: [], needs: [],
         grouping: {}, groupingHistory: [], drafts: [] };
       await refresh(project, sources);
@@ -321,10 +337,44 @@ export function createProjects({ github, analysis, storage }) {
       return { id: conversationId };
     },
     async action(user, projectId, command, body, key) {
-      const result = await mutate(() => owned(user, projectId), key, command, async project => {
+      const roles = { 'invite-member': ['owner'], 'remove-member': ['owner'],
+        'accept-invite': ['invited', 'editor', 'connector'], 'connect-repository': ['owner', 'connector'] };
+      const load = () => accessible(user, projectId, Object.hasOwn(roles, command) ? roles[command] : ['owner', 'editor']);
+      const result = await mutate(load, user.id + '/' + key, command, async project => {
         switch (command) {
+          case 'invite-member': {
+            const input = z.object({ login: short.regex(/^[a-zA-Z0-9_-]{1,100}$/), role: z.enum(['editor', 'connector']) }).parse(body);
+            const account = await github.account(user, input.login);
+            project.members ??= [];
+            requireThat(account.id !== project.owner && !project.members.some(m => m.id === account.id), 409, '该账号已经在成员或邀请列表中。');
+            project.members.push({ ...account, role: input.role, pending: true });
+            return {};
+          }
+          case 'remove-member': {
+            const member = find(project.members || [], short.parse(body.id));
+            project.members = project.members.filter(m => m.id !== member.id);
+            return {};
+          }
+          case 'accept-invite': {
+            const member = find(project.members, user.id);
+            member.pending = false;
+            return {};
+          }
+          case 'connect-repository': {
+            requireThat(!project.repo, 409, '此项目已连接仓库。');
+            const input = repoInput.parse(body);
+            const repos = await github.repositories(user);
+            const repo = repos.find(r => r.id === input.repoId && r.installation === input.installation);
+            requireThat(repo, 403, '请选择你有管理权限且已授权给 RoleUnion 的仓库。');
+            project.repo = repo;
+            project.branch = input.branch;
+            await refresh(project, project.sources);
+            project.needs.filter(n => n.work.status === 'waiting-repository').forEach(queue);
+            return {};
+          }
           case 'refresh':
             await refresh(project, body.sources === undefined ? project.sources : sourcesSchema.parse(body.sources));
+            project.needs.filter(n => !decisionFor(project, n)).forEach(queue);
             return { sha: project.sha };
           case 'process': {
             const need = find(project.needs, id.parse(body.needId));
@@ -401,7 +451,7 @@ export function createProjects({ github, analysis, storage }) {
             throw new HttpError(404, '找不到此操作。');
         }
       });
-      if (command === 'process' || command === 'decide-fit') runQueue(projectId);
+      if (['process', 'decide-fit', 'connect-repository', 'refresh'].includes(command)) runQueue(projectId);
       return result;
     },
   };

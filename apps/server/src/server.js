@@ -85,7 +85,10 @@ export function createRoleUnionServer({ origin, github, model, storage, sessionS
       const path = url.pathname.slice(studioPath.length);
       if (method === 'POST') requireThat(request.headers.origin === origin, 403, '请求来源无效。');
       if (method === 'GET' && path === '/api/health') return json(response, 200, { status: 'ok' });
-      if (method === 'GET' && path === '/api/auth/login') return auth.start(response);
+      if (method === 'GET' && path === '/api/auth/login') {
+        const projectId = z.uuid().safeParse(url.searchParams.get('project'));
+        return auth.start(response, projectId.success ? projectId.data : null);
+      }
       if (method === 'GET' && path === '/api/auth/callback') return await auth.finish(request, response, url.searchParams);
       if (method === 'POST' && path === '/api/auth/logout') return auth.logout(request, response);
       const publicMatch = path.match(publicAction);
