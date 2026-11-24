@@ -14,7 +14,8 @@ export function createAnalysis(model) {
     clarify(messages) {
       return model('clarify', [
         'Identify real user problems, context and expected outcomes. Ask one focused follow-up at a time when facts are missing.',
-        'If ready, separate independent requests and offer them for confirmation. Never invent answers.',
+        'A request is ready when the user has explained the problem, when it occurs and what result they want. Offer it for confirmation as soon as these are clear. Do not require implementation details or a root cause.',
+        'Separate independent requests and never invent answers.',
         'Return {reply: string, needs: [{problem, context, outcome, quotes: [exact contiguous excerpts from user messages]}]}. Return needs: [] while asking a question.',
       ].join(' '), messages, z.object({ reply: text, needs: z.array(complaint).max(8) }));
     },
