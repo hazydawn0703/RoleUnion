@@ -8,6 +8,7 @@ import { FileStorage } from '../../../packages/storage/src/fileStorage.js';
 import { createAnalysis } from './analysis.js';
 import { createAuth } from './auth.js';
 import { createGitHub } from './github.js';
+import { createDeployKeys } from './deployKeys.js';
 import { HttpError, json, readJson, requireThat } from './http.js';
 import { createModel } from './llmAccess.js';
 import { createProjects } from './projects.js';
@@ -25,9 +26,9 @@ const assets = {
   '/styles.css': ['text/css', new URL('styles.css', studio)],
 };
 
-export function createRoleUnionServer({ origin, github, model, storage, sessionSecret }) {
+export function createRoleUnionServer({ origin, github, model, storage, sessionSecret, deployKeys = createDeployKeys(storage.baseDir) }) {
   const auth = createAuth({ secret: sessionSecret, origin, studioPath, github });
-  const projects = createProjects({ github, analysis: createAnalysis(model), storage });
+  const projects = createProjects({ github, deployKeys, analysis: createAnalysis(model), storage });
   projects.resume();
   const publicPosts = new Map();
   const activeConversations = new Set();
