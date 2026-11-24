@@ -1,0 +1,106 @@
+.submission-page {
+  --paper: #f5f4f6;
+  --plum: #513c64;
+  --mint: #e5f3f1;
+  --raised: inset 1px 1px 2px #fff, inset -1px -1px 2px #46595118,
+    2px 4px 5px #34303516, 5px 12px 18px -9px #34303545;
+  background: radial-gradient(ellipse at 30% 38%, #faf9fa, var(--paper) 75%);
+  color: #26242a;
+  min-height: 100svh;
+  display: flow-root;
+  isolation: isolate;
+}
+.submission-page::after {
+  content: ''; position: fixed; inset: 0 0 0 auto; width: min(15vw, 25vh);
+  background: url('./paper-relief.webp') right top / 100% 100% no-repeat;
+  mask-image: linear-gradient(to right, transparent, black 9%);
+  z-index: -1; pointer-events: none;
+}
+.submission-page .site-header {
+  position: relative; min-height: clamp(52px, 7vh, 72px);
+  padding-inline: 5vw; background: transparent; border: 0;
+}
+.submission-page .site-header::before {
+  content: ''; position: absolute; left: 0; right: 15%; bottom: 0;
+  height: 1px; background: #c8c4c8;
+}
+.submission-page .site-header::after {
+  content: ''; position: absolute; bottom: -4px; left: 0; width: 2.6vw; height: 9px;
+  background: #ffc534; box-shadow: 1px 3px 4px #65523b45;
+}
+.submission-page .brand { color: #161519; font-size: clamp(20px, 2vw, 29px); }
+.submission-page .workspace {
+  width: min(68%, 1050px); margin: clamp(20px, 4vh, 44px) auto 36px;
+}
+.submission { display: grid; gap: clamp(18px, 2.8vh, 30px); }
+.interview-header { text-align: center; }
+.interview-header h1 {
+  color: var(--plum); font-size: clamp(32px, 4vw, 60px); font-weight: 760;
+}
+.portrait, .messages li:not(.user)::before {
+  background: url('./whale.webp') left center / 300% 100% no-repeat;
+}
+.portrait {
+  width: clamp(120px, 30vh, 300px); aspect-ratio: 1; margin: 10px auto 4px;
+  filter: drop-shadow(3px 6px 4px #46344926);
+}
+.portrait[data-state=thinking] { background-position: center; animation: ponder 1.6s ease-in-out infinite alternate; }
+.portrait[data-state=happy] { background-position: right; }
+@keyframes ponder { to { transform: translateY(-3px) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .portrait[data-state] { animation: none; } }
+.agent-caption { display: flex; justify-content: center; align-items: baseline; gap: .45em; font-size: clamp(16px, 1.75vw, 26px); }
+.agent-caption strong::after { content: '·'; margin-left: .45em; }
+.submission .panel {
+  padding: clamp(16px, 2.5vw, 36px); background: var(--mint); border: 0;
+  border-radius: 16px; box-shadow: var(--raised);
+}
+.composer form { gap: clamp(14px, 2vh, 22px); }
+.composer label { gap: .55em; font-size: clamp(18px, 1.8vw, 26px); font-weight: 700; }
+.composer textarea {
+  resize: none; min-width: 0; padding: .8em 1em; font-size: clamp(16px, 1.4vw, 21px);
+  line-height: 1.5; border: 0; border-radius: 11px; background: var(--paper);
+  box-shadow: inset 2px 3px 5px #38303836, 1px 1px 1px #fff;
+}
+.composer textarea::placeholder { color: #635e65; opacity: 1; }
+.submission .primary {
+  color: #2f251b; background: #ffc334; border: 0; font-weight: 700;
+  box-shadow: var(--raised); min-height: 44px;
+}
+.composer .primary { overflow: hidden; padding: 0; font-size: clamp(16px, 1.4vw, 21px); }
+.action-label { display: flex; align-items: stretch; gap: .85em; padding-left: 1.2em; line-height: 2.8; }
+.action-arrow { display: grid; place-items: center; padding-inline: .55em; background: #ff9b48; }
+.submission .primary:hover { background: #ffb824; }
+.submission .primary:active { transform: translateY(1px); }
+.submission :focus-visible { outline-color: #704a89; }
+.in-conversation .interview-header h1 { font-size: clamp(28px, 3vw, 44px); }
+.in-conversation .portrait { width: clamp(64px, 14vh, 142px); margin-block: 4px 0; }
+.in-conversation .agent-caption { font-size: clamp(16px, 1.5vw, 22px); }
+.messages {
+  display: flex; flex-direction: column; gap: clamp(14px, 2.6vh, 28px);
+  max-height: 46svh; overflow-y: auto; list-style: none; margin: 0;
+  padding: 6px 12px 18px; scrollbar-width: thin;
+}
+.messages li {
+  align-self: flex-start; display: flex; align-items: center; gap: 12px;
+  max-width: 84%; padding: .7em 1.15em; background: #dff2ee; color: #174e49;
+  font-size: clamp(16px, 1.6vw, 23px); border-radius: 16px; box-shadow: var(--raised);
+}
+.messages li:not(.user)::before { content: ''; flex: none; width: 2.65em; aspect-ratio: 1; }
+.messages li.user { align-self: flex-end; background: #e6d3f4; color: #49345d; border-bottom-right-radius: 4px; }
+.messages p { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.in-conversation .composer { padding: clamp(12px, 1.7vw, 24px); }
+.in-conversation .composer form { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.in-conversation .composer textarea { background: #edf7f5; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .submission-page::after { width: 28px; opacity: .45; }
+  .submission-page .workspace { width: calc(100% - 36px); margin-block: 22px; }
+  .portrait { width: clamp(110px, 24vh, 190px); }
+  .messages { padding-inline: 4px; }
+  .messages li { max-width: 92%; gap: 6px; padding: 10px 12px; }
+  .messages li:not(.user)::before { width: 2em; }
+  .in-conversation .composer form { gap: 8px; }
+  .action-label { gap: .5em; padding-left: .8em; }
+}

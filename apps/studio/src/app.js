@@ -6,6 +6,7 @@ const statuses = {
 };
 
 async function openSubmission() {
+  document.body.classList.add('submission-page');
   const path = currentPath;
   const info = await api(path);
   const storageKey = 'roleunion:' + path;
@@ -19,6 +20,7 @@ async function openSubmission() {
 
   function view() {
     const messages = conversation?.messages || [];
+    const active = messages.length > 0;
     const portrait = el('div', { className: 'portrait', 'aria-hidden': 'true' });
     const status = el('span', { role: 'status' });
     function expression(state, label) {
@@ -30,9 +32,9 @@ async function openSubmission() {
     const content = [
       el('header', { className: 'interview-header' }, el('h1', {}, info.name),
         portrait, el('div', { className: 'agent-caption' }, el('strong', {}, '小鲸'), status)),
-      messages.length && el('ol', { className: 'messages', 'aria-label': '对话记录' },
+      active && el('ol', { className: 'messages', 'aria-label': '对话记录', tabIndex: 0 },
         messages.map(message => el('li', { className: message.role },
-          el('span', {}, message.role === 'user' ? '你' : '小鲸'), el('p', {}, message.text)))),
+          el('span', { className: 'visually-hidden' }, message.role === 'user' ? '你' : '小鲸'), el('p', {}, message.text)))),
     ].filter(Boolean);
     if (conversation?.submitted) {
       content.push(block(el('h2', {}, '需求已提交'),
@@ -55,7 +57,14 @@ async function openSubmission() {
             show('需求已提交。');
           }, 'primary')), muted('如有出入，请在下方继续说明。')));
       }
-      content.push(block(submit(messages.length ? '发送回复' : '开始对话', async data => {
+      const messageInput = textarea('message', '', {
+        id: 'message', rows: active ? 1 : 3, maxLength: 4000,
+        placeholder: active ? '继续输入消息…' : '说说你当时想做什么，以及实际发生了什么…',
+        'aria-label': active ? '继续输入消息' : undefined,
+      });
+      const action = el('span', { className: 'action-label' }, active ? '发送' : '开始对话',
+        el('span', { className: 'action-arrow', 'aria-hidden': 'true' }, active ? '↑' : '→'));
+      const form = submit(action, async data => {
         expression('thinking', '正在梳理你的需求…');
         try {
           if (!id) {
@@ -70,10 +79,10 @@ async function openSubmission() {
           expression('listening', '发送未完成，可以重试');
           throw error;
         }
-      }, field(messages.length ? '补充说明' : '你在哪个环节遇到了困难？',
-        textarea('message', '', { id: 'message', rows: 2, maxLength: 4000, placeholder: '说说你当时想做什么，以及实际发生了什么…' })))));
+      }, active ? messageInput : field('你在哪个环节遇到了困难？', messageInput));
+      content.push(el('section', { className: 'panel composer' }, form));
     }
-    render(el('div', { className: 'submission' }, content));
+    render(el('div', { className: active ? 'submission in-conversation' : 'submission' }, content));
     const transcript = document.querySelector('.messages');
     if (transcript) transcript.scrollTop = transcript.scrollHeight;
   }
