@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { collectCode, draftSections } from './analysis.js';
 import { HttpError, requireThat } from './http.js';
+import { deployInput } from './deployKeys.js';
 
 const workspace = 'discovery';
 const id = z.uuid();
@@ -80,7 +81,7 @@ function publicConversation(conversation, project) {
   };
 }
 
-export function createProjects({ github, analysis, storage }) {
+export function createProjects({ github, deployKeys, analysis, storage }) {
   const all = () => storage.listProjects(workspace);
   const save = project => storage.saveProject(workspace, project);
   function read(id) {
@@ -109,7 +110,7 @@ export function createProjects({ github, analysis, storage }) {
     const role = roleOf(project, user);
     const { id, name, repo, branch, sha, members = [], operations, grouping, groupingHistory, ...rest } = project;
     if (role === 'invited') return { id, name, role, offeredRole: members.find(m => m.id === user.id).role };
-    const summary = { id, name, repo, branch, sha, role };
+    const summary = { id, name, repo, branch, sha, role, pendingKey: project.pendingKey };
     if (role === 'connector') return summary;
     return { ...summary, ...rest, members: role === 'owner' ? members : undefined,
       candidates: activeCandidates(project), canUndoGroup: Boolean(groupingHistory.length) };
@@ -143,13 +144,22 @@ export function createProjects({ github, analysis, storage }) {
     }
   }
 
+  function openSnapshot(project, pinnedSha) {
+    const reader = project.repo.type === 'deploy-key' ? deployKeys : github;
+    return reader.open(project.repo, project.branch, pinnedSha);
+  }
   async function refresh(project, sources) {
     requireThat(project.repo || sources.every(source => source.type === 'inline'), 422, '连接仓库后可选择仓库内的规划文件。');
-    const snapshot = project.repo ? await github.open(project.repo, project.branch) : null;
-    const plans = await Promise.all(sources.map(async source => {
-      if (source.type === 'inline') return { ...source };
-      return { ...source, text: await snapshot.read(source.path), sha: snapshot.sha };
-    }));
+    const snapshot = project.repo ? await openSnapshot(project) : null;
+    const plans = [];
+    try {
+      for (const source of sources) {
+        plans.push(source.type === 'inline' ? { ...source } :
+          { ...source, text: await snapshot.read(source.path), sha: snapshot.sha });
+      }
+    } finally {
+      await snapshot?.close?.();
+    }
     requireThat(plans.every(plan => plan.text.trim()), 422, '规划文档不能为空。');
     requireThat(plans.reduce((sum, plan) => sum + plan.text.length, 0) <= 48_000, 422, '有效规划合计最多 48,000 个字符。');
     const fingerprint = digest(plans.map(({ sha, ...content }) => content));
@@ -178,10 +188,15 @@ export function createProjects({ github, analysis, storage }) {
     const decision = decisionFor(project, need);
     requireThat(decision?.verdict === 'accepted', 409, '先确认需求符合当前规划。');
     if (need.analysis?.sha === project.sha && need.analysis.decisionId === decision.id) return need.analysis;
-    const snapshot = await github.open(project.repo, project.branch, project.sha);
     const { problem, context, outcome, quotes } = need;
     const input = { problem, context, outcome, quotes };
-    const contextFiles = await callModel(() => collectCode(snapshot, input, analysis));
+    const snapshot = await openSnapshot(project, project.sha);
+    let contextFiles;
+    try {
+      contextFiles = await callModel(() => collectCode(snapshot, input, analysis));
+    } finally {
+      await snapshot.close?.();
+    }
     const candidates = activeCandidates(project).map(({ id, title, parts }) => ({
       id, title, parts: parts.map(({ need, part }) => ({ goal: part.goal, change: part.change, scenario: need.context })),
     }));
@@ -338,7 +353,9 @@ export function createProjects({ github, analysis, storage }) {
     },
     async action(user, projectId, command, body, key) {
       const roles = { 'invite-member': ['owner'], 'remove-member': ['owner'],
-        'accept-invite': ['invited', 'editor', 'connector'], 'connect-repository': ['owner', 'connector'] };
+        'accept-invite': ['invited', 'editor', 'connector'], 'connect-repository': ['owner', 'connector'],
+        'prepare-deploy-key': ['owner', 'connector'], 'verify-deploy-key': ['owner', 'connector'],
+        'connect-deploy-key': ['owner', 'connector'] };
       const load = () => accessible(user, projectId, Object.hasOwn(roles, command) ? roles[command] : ['owner', 'editor']);
       const result = await mutate(load, user.id + '/' + key, command, async project => {
         switch (command) {
@@ -360,15 +377,42 @@ export function createProjects({ github, analysis, storage }) {
             member.pending = false;
             return {};
           }
+          case 'prepare-deploy-key': {
+            requireThat(!project.repo, 409, '此项目已连接仓库。');
+            const input = deployInput.parse(body);
+            project.pendingKey = { ...input, publicKey: await deployKeys.publicKey(project.id) };
+            return {};
+          }
+          case 'verify-deploy-key': {
+            requireThat(!project.repo && project.pendingKey, 409, '请先准备仓库公钥。');
+            const { name, branch } = project.pendingKey;
+            const snapshot = await deployKeys.open({ name, projectId }, branch);
+            try {
+              const tree = await snapshot.files();
+              project.pendingKey.verified = { sha: snapshot.sha, files: tree.paths.length, at: now() };
+              if (tree.paths.length) await snapshot.read(tree.paths[0]);
+            } finally {
+              await snapshot.close();
+            }
+            return {};
+          }
+          case 'connect-deploy-key':
           case 'connect-repository': {
             requireThat(!project.repo, 409, '此项目已连接仓库。');
-            const input = repoInput.parse(body);
-            const repos = await github.repositories(user);
-            const repo = repos.find(r => r.id === input.repoId && r.installation === input.installation);
-            requireThat(repo, 403, '请选择你有管理权限且已授权给 RoleUnion 的仓库。');
-            project.repo = repo;
-            project.branch = input.branch;
+            if (command === 'connect-deploy-key') {
+              const pending = project.pendingKey;
+              requireThat(pending?.verified && body.sha === pending.verified.sha, 409, '请先验证只读连接。');
+              project.repo = { type: 'deploy-key', name: pending.name, projectId };
+              project.branch = pending.branch;
+            } else {
+              const input = repoInput.parse(body);
+              const repos = await github.repositories(user);
+              project.repo = repos.find(r => r.id === input.repoId && r.installation === input.installation);
+              requireThat(project.repo, 403, '请选择你有管理权限且已授权给 RoleUnion 的仓库。');
+              project.branch = input.branch;
+            }
             await refresh(project, project.sources);
+            delete project.pendingKey;
             project.needs.filter(n => n.work.status === 'waiting-repository').forEach(queue);
             return {};
           }
@@ -451,7 +495,7 @@ export function createProjects({ github, analysis, storage }) {
             throw new HttpError(404, '找不到此操作。');
         }
       });
-      if (['process', 'decide-fit', 'connect-repository', 'refresh'].includes(command)) runQueue(projectId);
+      if (['process', 'decide-fit', 'connect-repository', 'connect-deploy-key', 'refresh'].includes(command)) runQueue(projectId);
       return result;
     },
   };

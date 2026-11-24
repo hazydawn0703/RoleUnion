@@ -2,7 +2,7 @@ import { App, Octokit } from 'octokit';
 import { HttpError, requireThat } from './http.js';
 
 const accessError = () => new HttpError(503, '无法读取 GitHub 仓库。请检查 GitHub App 的仓库授权，然后重试。');
-const usableSource = file => file.type === 'blob' && ['100644', '100755'].includes(file.mode)
+export const usableSource = file => file.type === 'blob' && ['100644', '100755'].includes(file.mode)
   && file.size <= 96_000 && /\.(?:[cm]?[jt]sx?|vue|svelte|py|rb|php|go|rs|java|kt|swift|cs|sql|graphql|proto|md|rst|html|css)$/i.test(file.path)
   && !/(^|\/)(?:\.|vendor\/|node_modules\/|dist\/)|(?:lock|min)\.[^.]+$/i.test(file.path);
 

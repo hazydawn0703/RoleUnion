@@ -75,8 +75,25 @@ function repositoryPanel(project, action, installUrl) {
     }, field('GitHub 仓库', picker), field('基准分支', branch),
     muted('接入后，RoleUnion 将向配置的模型发送分析所需的代码片段，项目负责人和产品协作者可查看引用与 PRD。')));
   };
-  return block(el('h2', {}, '连接 GitHub 仓库'), row(button('加载已授权仓库', load),
-    installUrl && el('a', { href: installUrl, target: '_blank', rel: 'noreferrer' }, '安装或配置只读 GitHub App')), controls);
+  const pending = project.pendingKey;
+  const setup = submit('准备项目公钥', data => action('prepare-deploy-key', Object.fromEntries(data)),
+    field('仓库（owner/repo）', input('name', pending?.name, { placeholder: 'your-team/product' })),
+    field('基准分支', input('branch', pending?.branch || 'main')));
+  return block(el('h2', {}, '连接 GitHub 仓库'), el('h3', {}, '仓库专用只读密钥'),
+    pending ? details('修改目标仓库或分支', setup) : setup,
+    pending && identity('目标仓库', pending.name + ' · ' + pending.branch),
+    pending && el('a', { href: 'https://github.com/' + pending.name + '/settings/keys', target: '_blank', rel: 'noreferrer' }, '打开此仓库的 Deploy keys'),
+    pending && muted('请仓库管理员添加以下公钥，保持 Allow write access 未勾选。移除 GitHub 上的这把公钥即可撤销读取。'),
+    pending && el('pre', {}, pending.publicKey),
+    pending && row(button('复制给仓库管理员', async () => {
+      await navigator.clipboard.writeText('请在 https://github.com/' + pending.name + '/settings/keys 添加此 Deploy key，保持 Allow write access 未勾选。\n' + pending.publicKey);
+      show('已复制只读授权说明和公钥。');
+    }), button('验证只读连接', () => action('verify-deploy-key', { attempt: crypto.randomUUID() }))),
+    pending?.verified && identity('已验证的提交和可分析文件数', pending.verified.sha + ' · ' + pending.verified.files),
+    pending?.verified && muted('启用后，RoleUnion 会把分析所需的代码片段发送给已配置的模型，项目负责人和产品协作者可查看引用。'),
+    pending?.verified && button('连接并启用代码分析', () => action('connect-deploy-key', { sha: pending.verified.sha }), 'primary'),
+    details('通过已有 GitHub App 安装接入', row(button('加载已授权仓库', load),
+      installUrl && el('a', { href: installUrl, target: '_blank', rel: 'noreferrer' }, '配置现有 GitHub App')), controls));
 }
 
 function teamPanel(project, action) {

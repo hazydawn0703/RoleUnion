@@ -100,8 +100,18 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
 
   let server;
   let address;
+  const deployKeys = {
+    publicKey: async () => 'ssh-ed25519 project-test',
+    open: async (repo, branch) => {
+      assert.equal(repo.name, 'external/private');
+      assert.equal(branch, 'main');
+      if (!state.keyAuthorized) throw new HttpError(422, 'Waiting for repository administrator.');
+      return { sha: state.sha, files: async () => ({ paths: ['README.md'] }),
+        read: async () => repoPolicy, close: async () => {} };
+    },
+  };
   async function start() {
-    server = createRoleUnionServer({ origin, github: git, model: fakeModel(state), storage: new FileStorage(directory),
+    server = createRoleUnionServer({ origin, github: git, deployKeys, model: fakeModel(state), storage: new FileStorage(directory),
       sessionSecret: 'a strong test secret of sufficient length' });
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
@@ -211,6 +221,23 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     assert.deepEqual(new Set((await api('/projects', { cookie: editor })).map(p => p.id)), new Set([id, second.id]));
     assert.equal((await api('/projects/' + second.id, { cookie: editor })).name, 'Second');
     await api('/projects/' + second.id, { cookie, expected: 404 });
+    const secondAction = (command, body, expected, actor = editor) =>
+      api('/projects/' + second.id + '/' + command, { cookie: actor, body, expected });
+    const target = { name: 'external/private', branch: 'main' };
+    await secondAction('prepare-deploy-key', target, 404, other);
+    await secondAction('prepare-deploy-key', { ...target, name: 'file:///repo' }, 422);
+    await secondAction('prepare-deploy-key', target);
+    await secondAction('connect-deploy-key', {}, 409);
+    await secondAction('verify-deploy-key', {}, 422);
+    state.keyAuthorized = true;
+    const modelCount = state.calls.length;
+    await secondAction('verify-deploy-key', {});
+    const verified = await api('/projects/' + second.id, { cookie: editor });
+    assert.equal(verified.pendingKey.verified.sha, state.sha);
+    assert.equal(verified.repo, null);
+    assert.equal(state.calls.length, modelCount);
+    await secondAction('connect-deploy-key', { sha: state.sha });
+    assert.equal((await api('/projects/' + second.id, { cookie: editor })).repo.type, 'deploy-key');
     await act('remove-member', { id: 'tech' });
     await api(path, { cookie: tech, expected: 404 });
     await submit('Need net totals for reconciliation');
