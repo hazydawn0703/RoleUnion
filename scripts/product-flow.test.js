@@ -25,10 +25,14 @@ const draftSections = {
 
 function fakeModel(state) {
   return createModel({ name: 'integration-model', apiKey: 'integration-only', fetchImpl: async (_url, request) => {
-    const { task, data } = JSON.parse(JSON.parse(request.body).messages[1].content);
+    const { messages } = JSON.parse(request.body);
+    const { task, data } = JSON.parse(messages[1].content);
     state.calls.push(task);
     let output;
     if (task === 'clarify') {
+      const contract = JSON.parse(messages[0].content.split('\n').at(-1));
+      assert.deepEqual(contract.required, ['reply', 'needs']);
+      assert.equal(contract.properties.needs.items.properties.quotes.type, 'array');
       assert(Array.isArray(data), 'The public conversation must only send messages to the model');
       const user = data.at(-1).text;
       output = user === 'Export is confusing'
