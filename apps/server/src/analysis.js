@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { investigate } from './interview.js';
 
 const text = z.string().trim().min(1).max(5000);
 const short = text.max(500);
@@ -11,13 +12,15 @@ export const draftSections = z.object({
 
 export function createAnalysis(model) {
   return {
-    clarify(messages) {
+    async clarify(messages, snapshot) {
+      const interfaceLabels = snapshot ? await investigate(model, snapshot, messages) : [];
       return model('clarify', [
         'Identify real user problems, context and expected outcomes. Ask one focused follow-up at a time when facts are missing.',
         'A request is ready when the user has explained the problem, when it occurs and what result they want. Offer it for confirmation as soon as these are clear. Do not require implementation details or a root cause.',
         'Separate independent requests and never invent answers.',
+        'Use observed interfaceLabels to ask which page or action the user means. Confirm the location with them before treating it as their context. If no labels match, ask what they see. Never invent repository findings. Describe only the user experience.',
         'Return {reply: string, needs: [{problem, context, outcome, quotes: [exact contiguous excerpts from user messages]}]}. Return needs: [] while asking a question.',
-      ].join(' '), messages, z.object({ reply: text, needs: z.array(complaint).max(8) }));
+      ].join(' '), { messages, interfaceLabels }, z.object({ reply: text, needs: z.array(complaint).max(8) }));
     },
     async classify(need, plans) {
       const schema = z.object({

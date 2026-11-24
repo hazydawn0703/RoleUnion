@@ -44,17 +44,38 @@ function sourceEditor(sources, connected) {
   };
 }
 
-async function home() {
+async function home(selectedId) {
   const projects = await api('/projects');
-  const plans = sourceEditor([{ type: 'inline' }], false);
-  const create = block(el('h2', {}, '创建项目'), submit('创建项目', async data => {
-    const result = await api('/projects', { name: data.get('name'), sources: plans.read() });
-    location.assign(studioPath + '/projects/' + result.id);
-  }, field('项目名称', input('name', '', { maxLength: 240 })), plans.controls));
-  render(heading('项目', '从用户原始需求生成有依据、可评审的 PRD。'), el('div', { className: 'home-grid' },
-    block(el('h2', {}, '我的项目'), projects.length ? projects.map(project =>
-      el('a', { className: 'project-card', href: studioPath + '/projects/' + project.id },
-        el('strong', {}, project.name), muted([roles[project.role], project.repo].filter(Boolean).join(' · ')))) : muted('创建首个项目后，便可邀请用户提交需求。')), create));
+  function view(selected, editing = false) {
+    let panel;
+    if (!selected || editing) {
+      const plans = sourceEditor(selected?.sources || [{ type: 'inline' }], Boolean(selected?.repo));
+      panel = block(el('h2', {}, editing ? '编辑项目' : '创建项目'), submit(editing ? '保存修改' : '创建项目', async data => {
+        const body = { name: data.get('name'), sources: plans.read() };
+        if (editing) {
+          await api('/projects/' + selected.id + '/edit-project', { ...body, revision: selected.revision });
+          await home(selected.id);
+          show('已保存项目。');
+        } else {
+          const result = await api('/projects', body);
+          location.assign(studioPath + '/projects/' + result.id);
+        }
+      }, field('项目名称', input('name', selected?.name, { maxLength: 240 })), plans.controls),
+      editing && button('取消', () => view(selected)));
+    } else {
+      panel = block(el('h2', {}, '项目详情'), identity('项目名称', selected.name),
+        selected.sources && el('div', { className: 'source-list' }, el('h3', {}, '判断需求方向的依据'),
+          selected.sources.map(source => source.type === 'inline' ? identity(source.title, source.text) : muted(source.path))),
+        row(el('a', { className: 'primary button', href: studioPath + '/projects/' + selected.id }, '进入项目'),
+          selected.sources && button('编辑项目', () => view(selected, true))));
+    }
+    render(heading('项目', '从用户原始需求生成有依据、可评审的 PRD。'), el('div', { className: 'home-grid' },
+      block(row(el('h2', {}, '我的项目'), selected && button('新建项目', () => view())),
+        projects.length ? projects.map(project => el('button', { type: 'button', className: 'project-card',
+          'aria-pressed': String(project === selected), onclick: () => view(project) },
+        el('strong', {}, project.name), muted([roles[project.role], project.repo].filter(Boolean).join(' · ')))) : muted('创建首个项目后，便可邀请用户提交需求。')), panel));
+  }
+  view(projects.find(project => project.id === selectedId));
 }
 
 function repositoryPanel(project, action, installUrl) {
