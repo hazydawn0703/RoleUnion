@@ -282,6 +282,7 @@ export function createProjects({ github, deployKeys, analysis, storage }) {
       return all().filter(p => roleOf(p, user)).map(p => ({
         id: p.id, name: p.name, role: roleOf(p, user),
         repo: roleOf(p, user) === 'invited' ? null : p.repo?.name,
+        ...(['owner', 'editor'].includes(roleOf(p, user)) && { sources: p.sources, revision: p.revision }),
       }));
     },
     get(user, id) {
@@ -325,7 +326,13 @@ export function createProjects({ github, deployKeys, analysis, storage }) {
         requireThat(conversation.messages.length < 60, 422, '对话已达到 30 轮，请新开对话。');
         const userMessage = { role: 'user', text: message };
         const history = [...conversation.messages, userMessage];
-        const result = await callModel(() => analysis.clarify(history));
+        const snapshot = project.repo ? await openSnapshot(project, project.sha) : null;
+        let result;
+        try {
+          result = await callModel(() => analysis.clarify(history, snapshot));
+        } finally {
+          await snapshot?.close?.();
+        }
         const original = history.filter(item => item.role === 'user');
         requireThat(result.needs.every(need => need.quotes.every(quote => original.some(item => item.text.includes(quote)))),
           502, '模型返回的引用无法在原话中找到，请重试。');
@@ -416,6 +423,16 @@ export function createProjects({ github, deployKeys, analysis, storage }) {
             project.needs.filter(n => n.work.status === 'waiting-repository').forEach(queue);
             return {};
           }
+          case 'edit-project': {
+            const input = z.object({ name: short, sources: sourcesSchema, revision: z.int().nonnegative() }).strict().parse(body);
+            requireThat(input.revision === project.revision, 409, '项目已更新，请刷新页面后重新编辑。');
+            project.name = input.name;
+            if (digest(input.sources) !== digest(project.sources)) {
+              await refresh(project, input.sources);
+              project.needs.filter(n => !decisionFor(project, n)).forEach(queue);
+            }
+            return {};
+          }
           case 'refresh':
             await refresh(project, body.sources === undefined ? project.sources : sourcesSchema.parse(body.sources));
             project.needs.filter(n => !decisionFor(project, n)).forEach(queue);
@@ -495,7 +512,7 @@ export function createProjects({ github, deployKeys, analysis, storage }) {
             throw new HttpError(404, '找不到此操作。');
         }
       });
-      if (['process', 'decide-fit', 'connect-repository', 'connect-deploy-key', 'refresh'].includes(command)) runQueue(projectId);
+      if (['process', 'decide-fit', 'connect-repository', 'connect-deploy-key', 'refresh', 'edit-project'].includes(command)) runQueue(projectId);
       return result;
     },
   };

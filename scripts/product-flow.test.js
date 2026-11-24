@@ -15,7 +15,7 @@ const origin = 'http://localhost:8787';
 const studio = '/apps/studio';
 const repo = { id: 501, name: 'example/store', branch: 'main', installation: 77 };
 const repoPolicy = 'We support finance reconciliation. Customer-facing quote export is out of scope.';
-const code = 'export function exportOrders() {\n  return ["order_id", "gross_total"];\n}\n';
+const code = 'export function exportOrders() {\n  return ["order_id", "gross_total"];\n}\nconst action = button("Export orders", exportOrders);';
 const changedFiles = ['src/orders.js', 'docs/roadmap.md'];
 const draftSections = {
   title: 'Refund reconciliation', problem: 'Finance needs net totals.', userScenarios: 'Monthly reconciliation',
@@ -33,11 +33,16 @@ function fakeModel(state) {
       const contract = JSON.parse(messages[0].content.split('\n').at(-1));
       assert.deepEqual(contract.required, ['reply', 'needs']);
       assert.equal(contract.properties.needs.items.properties.quotes.type, 'array');
-      assert(Array.isArray(data), 'The public conversation must only send messages to the model');
-      const user = data.at(-1).text;
+      assert.deepEqual(Object.keys(data).sort(), ['interfaceLabels', 'messages']);
+      if (state.calls.includes('investigate-interface')) assert.deepEqual(data.interfaceLabels, ['Export orders']);
+      const user = data.messages.at(-1).text;
       output = user === 'Export is confusing'
         ? { reply: 'Who uses this export, and for which task?', needs: [] }
         : { reply: 'Please confirm.', needs: [{ problem: user, context: 'Monthly reporting', outcome: 'Finish reporting', quotes: [user] }] };
+    } else if (task === 'investigate-interface') {
+      if (data.excerpts.length) assert.deepEqual(data.excerpts.map(item => item.path), ['src/orders.js']);
+      output = data.excerpts.length ? { reads: [], labels: ['Export orders', 'gross_total', 'Unobserved'] }
+        : { reads: [{ path: 'src/orders.js', line: 1 }, { path: '.env', line: 1 }], labels: [] };
     } else if (task === 'classify') {
       assert(data.plans.length);
       const problem = data.need.problem;
@@ -211,6 +216,13 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     await memberAction(editor, 'accept-invite', {});
     assert.deepEqual(Object.keys(await api(path, { cookie: tech })).sort(), ['id','name','repo','branch','sha','role'].sort());
     await memberAction(tech, 'refresh', {}, 403);
+    await memberAction(tech, 'edit-project', create, 403);
+    const edit = { name: 'Finance', sources: [{ ...create.sources[0], title: 'Finance priorities' }], revision: (await get()).revision };
+    await memberAction(editor, 'edit-project', edit);
+    await when(p => p.needs[0].work.status === 'waiting-repository');
+    assert.equal((await get()).name, 'Finance');
+    assert.equal((await get()).sources[0].title, 'Finance priorities');
+    await memberAction(editor, 'edit-project', edit, 409);
     await memberAction(editor, 'invite-member', { login: 'other', role: 'editor' }, 403);
     await memberAction(editor, 'connect-repository', connect, 403);
     await memberAction(tech, 'connect-repository', { ...connect, repoId: 999 }, 403);
@@ -274,7 +286,7 @@ test('GitHub project, conversation clarification, planning gate, code evidence, 
     const outdated = await act('draft', { candidates: [left.id] });
     state.sha = 'b'.repeat(40);
     await act('refresh', {});
-    assert.equal((await get()).planId, initial.planId);
+    assert.equal((await get()).planId, project.planId);
     await act('decide-draft', { draftId: outdated.id, versionId: outdated.versionId, verdict: 'accepted', reason: 'Wrong commit.' }, 409);
 
     await new Promise(resolve => server.close(resolve));

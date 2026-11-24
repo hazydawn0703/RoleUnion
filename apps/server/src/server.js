@@ -20,6 +20,7 @@ const page = new RegExp('^/(?:projects/' + uuid + '|submit/' + uuid + '/' + uuid
 const studioPath = '/apps/studio';
 const studio = new URL('../../studio/', import.meta.url);
 const assets = {
+  '/whale.webp': ['image/webp', new URL('whale.webp', studio)],
   '/app.js': ['text/javascript', new URL('src/app.js', studio)],
   '/pm.js': ['text/javascript', new URL('src/pm.js', studio)],
   '/ui.js': ['text/javascript', new URL('src/ui.js', studio)],
