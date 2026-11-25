@@ -52,7 +52,7 @@ summary { cursor: pointer; font-weight: 610; color: var(--accent); }
   display: flex; align-items: center; justify-content: space-between; min-height: 62px;
   padding: 0 max(20px, calc((100vw - 1120px) / 2)); background: #fff; border-bottom: 1px solid var(--line);
 }
-.brand { text-decoration: none; color: #173b30; font-size: 1.24rem; font-weight: 760; letter-spacing: -.035em; }
+.brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #173b30; font-size: 1.24rem; font-weight: 760; letter-spacing: -.035em; }
 .workspace { width: min(1120px, calc(100% - 40px)); margin: 38px auto 72px; overflow-wrap: anywhere; }
 .page-heading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: end; gap: 16px; margin: 0 0 20px; }
 .page-heading p { margin-top: 6px; }
