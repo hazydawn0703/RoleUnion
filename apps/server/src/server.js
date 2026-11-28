@@ -20,6 +20,8 @@ const page = new RegExp('^/(?:projects/' + uuid + '|submit/' + uuid + '/' + uuid
 const studioPath = '/apps/studio';
 const studio = new URL('../../studio/', import.meta.url);
 const assets = {
+  '/brand-mark.png': ['image/png', new URL('brand-mark.png', studio)],
+  '/favicon.ico': ['image/x-icon', new URL('favicon.ico', studio)],
   '/whale.webp': ['image/webp', new URL('whale.webp', studio)],
   '/paper-relief.webp': ['image/webp', new URL('paper-relief.webp', studio)],
   '/submission.css': ['text/css', new URL('submission.css', studio)],
